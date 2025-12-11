@@ -165,9 +165,9 @@ with tab1:
     
     # KPI (始終顯示區間總和，不受日/週影響)
     k1, k2, k3, k4 = st.columns(4)
-    tot_rev = df_merge_daily['全站營收'].sum() if view_mode == "每日 (Daily)" else df_chart['全站營收'].sum() # 確保總和一致，但用 resample 後的 df_chart 來算比較安全
-    # 修正：其實總和無論日或週都應該一樣，使用 df_merge_daily (原始每日) 計算最精準
-    tot_rev = df_site_f['全站營收'].sum()
+    
+    # [修正] 這裡使用 df_site_f 的原始欄位名稱 '營業額'
+    tot_rev = df_site_f['營業額'].sum()
     ad_rev = df_ads_f['轉換金額'].sum()
     org_rev = tot_rev - ad_rev 
     
