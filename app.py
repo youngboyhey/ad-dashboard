@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 # 1. 設定頁面
 st.set_page_config(page_title="全通路電商戰情室", layout="wide")
-st.title("📊 全通路電商戰情室 (Ads + Official Site)")
+st.title("📊 全通路電商戰情室")
 
 # 2. Google Sheet 設定
 sheet_id = "17EYeSds7eV-eX4qFt3_gS8ttL-aw-ARzVJ1rwveqTZ4"
@@ -21,8 +21,10 @@ url_site = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv
 color_map = {
     'Google': '#EA4335',  
     'Meta': '#4267B2',    
-    'Organic/Direct': '#34A853', 
-    'Ads': '#FBBC05'      
+    'Organic/Direct': '#34A853', # 自然流量 (綠)
+    'Ads': '#FBBC05',            # 廣告總合 (黃)
+    'Traffic_Ads': '#F6B26B',    # 流量圖-廣告點擊 (淺橘)
+    'Traffic_Org': '#93C47D'     # 流量圖-自然流量 (淺綠)
 }
 
 # 3. 數據處理核心
@@ -59,10 +61,9 @@ def load_data():
         
         df['廣告期間(起)'] = pd.to_datetime(df['廣告期間(起)'], errors='coerce')
         df['廣告期間(迄)'] = pd.to_datetime(df['廣告期間(迄)'], errors='coerce')
-        df['廣告期間(迄)'] = df['廣告期間(迄)'].fillna(df['廣告期間(起)']) # 補全日期
+        df['廣告期間(迄)'] = df['廣告期間(迄)'].fillna(df['廣告期間(起)']) 
         if '轉換金額' in df.columns: df['轉換金額'] = df['轉換金額'].fillna(0)
     
-    # 合併原始廣告數據
     common = ['Platform', '廣告活動', '廣告期間(起)', '廣告期間(迄)', '費用', '曝光次數', '點擊數', '轉換', '轉換金額']
     existing = [c for c in common if c in df_g.columns and c in df_m.columns]
     df_raw_ads = pd.concat([df_g[existing], df_m[existing]], ignore_index=True)
@@ -101,8 +102,8 @@ def load_data():
 df_ads, df_site = load_data()
 if df_ads.empty or df_site.empty: st.stop()
 
-# 4. 側邊欄過濾
-st.sidebar.header("🎯 數據篩選")
+# 4. 側邊欄過濾 (全域)
+st.sidebar.header("🎯 全域篩選器")
 min_date = min(df_ads['統計日期'].min(), df_site['日期'].min())
 max_date = max(df_ads['統計日期'].max(), df_site['日期'].max())
 date_range = st.sidebar.date_input("📅 日期區間", [min_date, max_date])
@@ -110,128 +111,195 @@ date_range = st.sidebar.date_input("📅 日期區間", [min_date, max_date])
 if len(date_range) != 2: st.stop()
 start_d, end_d = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
 
-# 過濾數據
-df_ads_f = df_ads[(df_ads['統計日期'] >= start_d) & (df_ads['統計日期'] <= end_d)].copy()
+# 全域篩選：廣告平台
+all_platforms = df_ads['Platform'].unique()
+sidebar_platform = st.sidebar.multiselect("📱 廣告平台 (影響圖表)", all_platforms, default=all_platforms)
+
+# 應用過濾
+df_ads_f = df_ads[
+    (df_ads['統計日期'] >= start_d) & 
+    (df_ads['統計日期'] <= end_d) &
+    (df_ads['Platform'].isin(sidebar_platform))
+].copy()
+
 df_site_f = df_site[(df_site['日期'] >= start_d) & (df_site['日期'] <= end_d)].copy()
 
 # 準備合併數據 (全站 vs 廣告)
 daily_ads = df_ads_f.groupby('統計日期')[['費用', '轉換金額', '點擊數', '轉換']].sum().reset_index()
 daily_ads.rename(columns={'統計日期': '日期', '費用': '廣告花費', '轉換金額': '廣告營收', '點擊數': '廣告點擊', '轉換': '廣告訂單'}, inplace=True)
+
 daily_site = df_site_f[['日期', '營業額', '流量', '訂單數', '註冊會員數']].copy()
-daily_site.rename(columns={'營業額': '全站營收'}, inplace=True)
+daily_site.rename(columns={'營業額': '全站營收', '流量': '全站流量'}, inplace=True)
 
 df_merge = pd.merge(daily_site, daily_ads, on='日期', how='left').fillna(0)
-# 🔥 修正負值問題：如果廣告營收 > 全站，自然營收設為 0 (視覺上)
+
+# 計算自然流量/營收 (修正負值視覺)
 df_merge['自然流量營收'] = (df_merge['全站營收'] - df_merge['廣告營收']).apply(lambda x: x if x > 0 else 0)
+df_merge['自然流量'] = (df_merge['全站流量'] - df_merge['廣告點擊']).apply(lambda x: x if x > 0 else 0)
 
 # === 創建分頁 (Tabs) ===
 tab1, tab2 = st.tabs(["🌐 全站營運總覽", "⚔️ Google vs Meta 雙平台 PK"])
 
 # ==========================================
-# Tab 1: 全站營運總覽 (老闆視角)
+# Tab 1: 全站營運總覽
 # ==========================================
 with tab1:
-    st.subheader("營收來源與會員成長")
+    st.subheader("💰 營收與流量構成分析")
     
-    # KPI
+    # --- KPI Row 1: 營收 ---
     k1, k2, k3, k4 = st.columns(4)
     tot_rev = df_merge['全站營收'].sum()
     ad_rev = df_merge['廣告營收'].sum()
-    org_rev = tot_rev - ad_rev # 數學上真實的自然營收 (可能為負，代表廣告歸因大於後台)
-    new_mem = df_merge['註冊會員數'].sum()
+    org_rev = tot_rev - ad_rev 
     
     k1.metric("🏠 全站總營收", f"${tot_rev:,.0f}")
     k2.metric("📢 廣告帶來營收", f"${ad_rev:,.0f}", delta=f"佔比 {(ad_rev/tot_rev*100 if tot_rev>0 else 0):.1f}%")
-    k3.metric("🌳 自然/其他營收", f"${org_rev:,.0f}", help="若為負值代表廣告平台歸因大於官網實際入帳")
-    k4.metric("👥 新增會員", f"{new_mem:,.0f} 人")
+    k3.metric("🌳 自然/其他營收", f"${org_rev:,.0f}")
+    k4.metric("🛒 全站轉換率", f"{(df_merge['全站營收'].count() / df_merge['全站流量'].sum() * 100 if df_merge['全站流量'].sum()>0 else 0):.2f}%" if '全站流量' in df_merge else "N/A")
+    
+    # --- KPI Row 2: 流量 ---
+    st.markdown("---")
+    t1, t2, t3, t4 = st.columns(4)
+    tot_traffic = df_merge['全站流量'].sum()
+    ad_clicks = df_merge['廣告點擊'].sum() # 近似於 Paid Traffic
+    org_traffic = tot_traffic - ad_clicks
+    new_mem = df_merge['註冊會員數'].sum()
+    
+    t1.metric("👣 全站總流量 (Visits)", f"{tot_traffic:,.0f}")
+    t2.metric("👆 廣告點擊導入", f"{ad_clicks:,.0f}", delta=f"佔比 {(ad_clicks/tot_traffic*100 if tot_traffic>0 else 0):.1f}%")
+    t3.metric("🔍 自然/直接流量", f"{org_traffic:,.0f}")
+    t4.metric("👥 新增會員", f"{new_mem:,.0f} 人")
     
     st.divider()
 
+    # 圖表區
     c1, c2 = st.columns(2)
     with c1:
-        # 堆疊圖 (使用修正過負值的欄位繪圖，避免跑版)
-        df_stack = df_merge[['日期', '廣告營收', '自然流量營收']].melt(id_vars='日期', var_name='來源', value_name='金額')
-        fig_rev = px.bar(df_stack, x='日期', y='金額', color='來源', 
+        # 營收堆疊圖
+        df_rev_stack = df_merge[['日期', '廣告營收', '自然流量營收']].melt(id_vars='日期', var_name='來源', value_name='金額')
+        fig_rev = px.bar(df_rev_stack, x='日期', y='金額', color='來源', 
                          title="每日營收組成 (廣告 vs 自然)",
                          color_discrete_map={'廣告營收': color_map['Google'], '自然流量營收': color_map['Organic/Direct']})
         st.plotly_chart(fig_rev, use_container_width=True)
     
     with c2:
-        # 雙軸圖：會員 vs 廣告費
-        fig_dual = go.Figure()
-        fig_dual.add_trace(go.Bar(x=df_merge['日期'], y=df_merge['註冊會員數'], name='新增會員', marker_color='#FF9900'))
-        fig_dual.add_trace(go.Scatter(x=df_merge['日期'], y=df_merge['廣告花費'], name='廣告花費', yaxis='y2', 
-                                      line=dict(color='gray', dash='dot')))
-        fig_dual.update_layout(title="會員註冊 vs 廣告投入", 
-                               yaxis=dict(title="會員數"),
-                               yaxis2=dict(title="廣告花費 ($)", overlaying='y', side='right', showgrid=False))
-        st.plotly_chart(fig_dual, use_container_width=True)
+        # 流量堆疊圖 (新功能)
+        df_traf_stack = df_merge[['日期', '廣告點擊', '自然流量']].melt(id_vars='日期', var_name='來源', value_name='流量')
+        fig_traf = px.bar(df_traf_stack, x='日期', y='流量', color='來源',
+                          title="每日流量組成 (廣告點擊 vs 自然訪客)",
+                          color_discrete_map={'廣告點擊': color_map['Traffic_Ads'], '自然流量': color_map['Traffic_Org']})
+        st.plotly_chart(fig_traf, use_container_width=True)
+
+    # 會員成長圖
+    fig_mem = go.Figure()
+    fig_mem.add_trace(go.Bar(x=df_merge['日期'], y=df_merge['註冊會員數'], name='新增會員', marker_color='#FF9900'))
+    fig_mem.add_trace(go.Scatter(x=df_merge['日期'], y=df_merge['廣告花費'], name='廣告花費', yaxis='y2', 
+                                 line=dict(color='gray', dash='dot')))
+    fig_mem.update_layout(title="會員註冊 vs 廣告投入", 
+                          yaxis=dict(title="會員數"),
+                          yaxis2=dict(title="廣告花費 ($)", overlaying='y', side='right', showgrid=False))
+    st.plotly_chart(fig_mem, use_container_width=True)
 
 # ==========================================
-# Tab 2: Google vs Meta 雙平台 PK (投手視角)
+# Tab 2: Google vs Meta 雙平台 PK
 # ==========================================
 with tab2:
     st.subheader("平台成效深度對比")
     
-    # 1. 計算各平台關鍵指標
+    # 1. 平台 KPI 卡片
     platform_kpi = df_ads_f.groupby('Platform')[['費用', '轉換金額', '轉換', '點擊數']].sum()
     platform_kpi['ROAS'] = platform_kpi['轉換金額'] / platform_kpi['費用']
     platform_kpi['CPA'] = platform_kpi['費用'] / platform_kpi['轉換']
     platform_kpi['CPC'] = platform_kpi['費用'] / platform_kpi['點擊數']
     
-    # 2. 顯示 KPI 卡片 (分成兩列：Google 一列，Meta 一列)
-    
-    # Google 區塊
-    st.markdown("#### 🔴 Google Ads")
-    g_cols = st.columns(5)
-    if 'Google' in platform_kpi.index:
-        g_data = platform_kpi.loc['Google']
-        g_cols[0].metric("花費", f"${g_data['費用']:,.0f}")
-        g_cols[1].metric("營收", f"${g_data['轉換金額']:,.0f}")
-        g_cols[2].metric("ROAS", f"{g_data['ROAS']:.2f}")
-        g_cols[3].metric("CPA", f"${g_data['CPA']:.0f}")
-        g_cols[4].metric("CPC", f"${g_data['CPC']:.1f}")
-    else:
-        st.info("無 Google 數據")
+    col_g, col_m = st.columns(2)
+    with col_g:
+        st.markdown("#### 🔴 Google Ads")
+        if 'Google' in platform_kpi.index:
+            g = platform_kpi.loc['Google']
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ROAS", f"{g['ROAS']:.2f}")
+            c2.metric("CPA", f"${g['CPA']:.0f}")
+            c3.metric("花費", f"${g['費用']:,.0f}")
+        else:
+            st.info("無數據")
 
-    st.markdown("---")
-
-    # Meta 區塊
-    st.markdown("#### 🔵 Meta Ads")
-    m_cols = st.columns(5)
-    if 'Meta' in platform_kpi.index:
-        m_data = platform_kpi.loc['Meta']
-        m_cols[0].metric("花費", f"${m_data['費用']:,.0f}")
-        m_cols[1].metric("營收", f"${m_data['轉換金額']:,.0f}")
-        m_cols[2].metric("ROAS", f"{m_data['ROAS']:.2f}")
-        m_cols[3].metric("CPA", f"${m_data['CPA']:.0f}")
-        m_cols[4].metric("CPC", f"${m_data['CPC']:.1f}")
-    else:
-        st.info("無 Meta 數據")
-        
+    with col_m:
+        st.markdown("#### 🔵 Meta Ads")
+        if 'Meta' in platform_kpi.index:
+            m = platform_kpi.loc['Meta']
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ROAS", f"{m['ROAS']:.2f}")
+            c2.metric("CPA", f"${m['CPA']:.0f}")
+            c3.metric("花費", f"${m['費用']:,.0f}")
+        else:
+            st.info("無數據")
+            
     st.divider()
     
-    # 3. 圖表 PK
+    # 2. 圖表 PK
     c3, c4 = st.columns(2)
-    
     with c3:
-        # ROAS 趨勢對比
+        # ROAS 趨勢
         df_weekly = df_ads_f.copy()
         df_weekly['Week'] = df_weekly['統計日期'].dt.to_period('W').apply(lambda r: r.start_time)
         weekly_group = df_weekly.groupby(['Platform', 'Week'])[['費用', '轉換金額']].sum().reset_index()
         weekly_group['ROAS'] = weekly_group['轉換金額'] / weekly_group['費用']
-        
         fig_roas = px.line(weekly_group, x='Week', y='ROAS', color='Platform', markers=True,
                            title="每週 ROAS 趨勢對比", color_discrete_map=color_map)
         st.plotly_chart(fig_roas, use_container_width=True)
 
     with c4:
-        # Top 10 廣告 (混和排名)
+        # Top 10
         df_camp = df_ads_f.groupby(['Platform', '廣告活動'])[['費用', '轉換金額']].sum().reset_index()
-        df_camp['ROAS'] = df_camp.apply(lambda x: x['轉換金額']/x['費用'] if x['費用']>0 else 0, axis=1)
         df_top = df_camp.sort_values('轉換金額', ascending=True).tail(10)
-        
         fig_top = px.bar(df_top, x='轉換金額', y='廣告活動', orientation='h', color='Platform',
                          title="Top 10 廣告活動 (依營收)", text_auto='.0f', color_discrete_map=color_map)
         fig_top.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_top, use_container_width=True)
+
+    # 3. 詳細報表區 (New Feature)
+    st.markdown("---")
+    st.subheader("📋 詳細廣告報表")
+    
+    # 表格專用過濾器
+    with st.expander("🔎 表格進階篩選", expanded=True):
+        # 使用 sidebar 選中的平台作為預設選項
+        table_platforms = st.multiselect("選擇報表顯示平台", all_platforms, default=sidebar_platform)
+    
+    # 準備表格數據 (根據表格篩選器過濾)
+    # 注意：這裡使用 df_ads (全量拆解後數據) 再次過濾，確保表格可以獨立於圖表操作(如果需要)
+    # 但為了邏輯一致，通常建議基於日期過濾
+    
+    df_table = df_ads[
+        (df_ads['統計日期'] >= start_d) & 
+        (df_ads['統計日期'] <= end_d) & 
+        (df_ads['Platform'].isin(table_platforms))
+    ].copy()
+    
+    # 聚合計算 (避免每日拆解太細，改為按廣告活動聚合)
+    # 若想看每日明細，可將 '統計日期' 加入 groupby
+    group_cols = ['統計日期', 'Platform', '廣告活動']
+    df_table_agg = df_table.groupby(group_cols)[['費用', '轉換金額', '曝光次數', '點擊數', '轉換']].sum().reset_index()
+    
+    # 計算衍生指標
+    df_table_agg['ROAS'] = df_table_agg.apply(lambda x: x['轉換金額']/x['費用'] if x['費用']>0 else 0, axis=1)
+    df_table_agg['CPC'] = df_table_agg.apply(lambda x: x['費用']/x['點擊數'] if x['點擊數']>0 else 0, axis=1)
+    df_table_agg['CTR(%)'] = df_table_agg.apply(lambda x: (x['點擊數']/x['曝光次數']*100) if x['曝光次數']>0 else 0, axis=1)
+    df_table_agg['CPA'] = df_table_agg.apply(lambda x: x['費用']/x['轉換'] if x['轉換']>0 else 0, axis=1)
+    
+    # 格式化顯示
+    st.dataframe(
+        df_table_agg.sort_values(['統計日期', '轉換金額'], ascending=[False, False]),
+        column_config={
+            "統計日期": st.column_config.DateColumn("日期"),
+            "費用": st.column_config.NumberColumn("花費", format="$%d"),
+            "轉換金額": st.column_config.NumberColumn("營收", format="$%d"),
+            "ROAS": st.column_config.NumberColumn("ROAS", format="%.2f"),
+            "CTR(%)": st.column_config.NumberColumn("CTR", format="%.2f%%"),
+            "CPC": st.column_config.NumberColumn("CPC", format="$%.1f"),
+            "CPA": st.column_config.NumberColumn("CPA", format="$%.0f"),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
