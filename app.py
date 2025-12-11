@@ -16,6 +16,12 @@ gid_meta = "1891939344"
 url_google = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_google}"
 url_meta = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_meta}"
 
+# === 🎨 定義品牌顏色 (Google 紅 / Meta 藍) ===
+color_map = {
+    'Google': '#EA4335',  # Google 官方紅
+    'Meta': '#4267B2'     # Facebook/Meta 官方藍
+}
+
 # 3. 數據處理核心 (加入快取)
 @st.cache_data(ttl=600)
 def load_data():
@@ -76,7 +82,7 @@ if len(date_range) == 2:
 else:
     df_f = df.copy()
 
-# 5. 全局 KPI (加入 CPA 與 CVR)
+# 5. 全局 KPI
 c1, c2, c3, c4, c5 = st.columns(5)
 total_cost = df_f['費用'].sum()
 total_rev = df_f['轉換金額'].sum()
@@ -101,18 +107,23 @@ col_p1, col_p2 = st.columns(2)
 df_platform = df_f.groupby('Platform')[['費用', '轉換金額']].sum().reset_index()
 
 with col_p1:
-    fig_pie1 = px.pie(df_platform, values='費用', names='Platform', title='💸 預算消耗佔比 (Share of Wallet)', hole=0.4)
+    # 加入 color_discrete_map
+    fig_pie1 = px.pie(df_platform, values='費用', names='Platform', 
+                      title='💸 預算消耗佔比 (Share of Wallet)', hole=0.4,
+                      color='Platform', color_discrete_map=color_map)
     st.plotly_chart(fig_pie1, use_container_width=True)
 
 with col_p2:
-    fig_pie2 = px.pie(df_platform, values='轉換金額', names='Platform', title='💰 營收貢獻佔比 (Share of Revenue)', hole=0.4)
+    # 加入 color_discrete_map
+    fig_pie2 = px.pie(df_platform, values='轉換金額', names='Platform', 
+                      title='💰 營收貢獻佔比 (Share of Revenue)', hole=0.4,
+                      color='Platform', color_discrete_map=color_map)
     st.plotly_chart(fig_pie2, use_container_width=True)
 
-# --- 第二層：效率趨勢 (修正聚合邏輯) ---
+# --- 第二層：效率趨勢 ---
 st.subheader("📉 效率漏斗趨勢 (Efficiency Trend)")
 df_f['Week'] = df_f['廣告期間(起)'].dt.to_period('W').apply(lambda r: r.start_time)
 
-# 正確的加權計算：先加總分子分母，再相除
 df_weekly = df_f.groupby(['Platform', 'Week'])[['費用', '轉換金額', '轉換', '點擊數', '曝光次數']].sum().reset_index()
 df_weekly['ROAS'] = df_weekly['轉換金額'] / df_weekly['費用']
 df_weekly['CPA'] = df_weekly['費用'] / df_weekly['轉換']
@@ -123,8 +134,10 @@ trend_metric = st.selectbox("選擇分析指標", ['ROAS (投資報酬率)', 'CP
 metric_map = {'ROAS (投資報酬率)': 'ROAS', 'CPA (單次轉換成本)': 'CPA', 'CTR (點擊率)': 'CTR', '費用': '費用', '轉換金額': '轉換金額'}
 y_col = metric_map[trend_metric]
 
+# 加入 color_discrete_map
 fig_line = px.line(df_weekly, x='Week', y=y_col, color='Platform', markers=True, 
-                   title=f"雙平台 {trend_metric} 週走勢")
+                   title=f"雙平台 {trend_metric} 週走勢",
+                   color_discrete_map=color_map)
 st.plotly_chart(fig_line, use_container_width=True)
 
 # --- 第三層：英雄榜 (Top Campaigns) ---
@@ -132,21 +145,21 @@ st.subheader("🏆 黃金廣告活動英雄榜 (Top 10)")
 rank_metric = st.radio("排序依據", ['轉換金額 (營收)', 'ROAS (效率)'], horizontal=True)
 rank_col = '轉換金額' if rank_metric == '轉換金額 (營收)' else 'ROAS'
 
-# 聚合計算
 df_camp = df_f.groupby(['Platform', '廣告活動'])[['費用', '轉換金額']].sum().reset_index()
 df_camp['ROAS'] = df_camp['轉換金額'] / df_camp['費用']
 
-# 避免 ROAS 無限大或無意義 (花費過少)
 if rank_col == 'ROAS':
-    df_camp = df_camp[df_camp['費用'] > 1000] # 過濾掉花費太少的測試廣告
+    df_camp = df_camp[df_camp['費用'] > 1000] 
 
-df_top = df_camp.sort_values(rank_col, ascending=True).tail(10) # 取前10
+df_top = df_camp.sort_values(rank_col, ascending=True).tail(10)
 
+# 加入 color_discrete_map
 fig_bar = px.bar(df_top, x=rank_col, y='廣告活動', orientation='h', color='Platform', 
                  text_auto='.2f' if rank_col=='ROAS' else '.0f',
-                 title=f"表現最好的前 10 名廣告 ({rank_metric})")
-# === ✨ 加入這行修正排序問題 ✨ ===
-# 'total ascending' 代表數值越大的條形圖會顯示在越上方 (在水平圖表中)
+                 title=f"表現最好的前 10 名廣告 ({rank_metric})",
+                 color_discrete_map=color_map)
+
+# === ✨ 修正排序問題 ✨ ===
 fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
 
 st.plotly_chart(fig_bar, use_container_width=True)
