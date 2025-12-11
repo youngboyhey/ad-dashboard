@@ -145,6 +145,10 @@ df_top = df_camp.sort_values(rank_col, ascending=True).tail(10) # 取前10
 fig_bar = px.bar(df_top, x=rank_col, y='廣告活動', orientation='h', color='Platform', 
                  text_auto='.2f' if rank_col=='ROAS' else '.0f',
                  title=f"表現最好的前 10 名廣告 ({rank_metric})")
+# === ✨ 加入這行修正排序問題 ✨ ===
+# 'total ascending' 代表數值越大的條形圖會顯示在越上方 (在水平圖表中)
+fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+
 st.plotly_chart(fig_bar, use_container_width=True)
 
 # 7. 詳細報表
