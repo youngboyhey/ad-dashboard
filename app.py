@@ -65,9 +65,10 @@ def load_and_clean_data():
         return 0.0
     
     def clean_numeric(x):
-        if isinstance(x, str) and x:
-            return float(str(x).replace(',', ''))
-        return 0.0
+        # 移除型別判斷，強制轉字串處理，確保數字與字串都能被正確轉換
+        if x is None or str(x).strip() == '':
+            return 0.0
+        return float(str(x).replace(',', ''))
     
     cols_currency = ['費用', 'CPC', '單次轉換費用', '轉換金額']
     cols_num = ['曝光次數', '點擊數', '轉換']
