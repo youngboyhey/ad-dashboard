@@ -4,8 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # 1. 設定頁面
-st.set_page_config(page_title="「CarMall 車魔商城」電商戰情室", layout="wide")
-st.title("📊 「CarMall 車魔商城」電商戰情室")
+st.set_page_config(page_title="CarMall 車魔商城 - 電商戰情室", layout="wide")
+st.title("📊 CarMall 車魔商城 - 電商戰情室")
 
 # 2. Google Sheet 設定
 sheet_id = "17EYeSds7eV-eX4qFt3_gS8ttL-aw-ARzVJ1rwveqTZ4"
