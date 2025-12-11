@@ -1,60 +1,38 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import io
 
-# 1. 內嵌數據 (直接包含您的 Google 與 Meta 報表資料 - 已修正CSV格式)
-csv_google_raw = """廣告活動,廣告目標,廣告類型,廣告期間(起),廣告期間(迄),費用,曝光次數,點擊數,CPC,點擊率,轉換,轉換率,單次轉換費用,轉換金額,ROAS,附註
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/10/1","2025/10/7","NT$3,151","52,935","767","NT$4.11","1.45%","0","0.00%","","NT$0","0.00",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/10/1","2025/10/7","NT$0","9","0","NT$0.00","0.00%","0","0.00%","","NT$0","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/10/8","2025/10/14","NT$2,005","82,354","510","NT$3.93","0.62%","1","0.20%","NT$2,005","NT$2,005","1.00",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/10/8","2025/10/14","NT$1,728","11,332","124","NT$13.94","1.09%","0","0.00%","","","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/10/15","2025/10/21","NT$1,524","31,388","275","NT$5.54","0.88%","0","0.00%","","NT$0","0.00",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/10/15","2025/10/21","NT$1,677","2,278","90","NT$18.63","3.95%","1","1.11%","NT$1,677","NT$565","0.34",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/10/22","2025/10/28","NT$1,962","24,998","373","NT$5.26","1.49%","1","0.27%","NT$1,962","NT$2,290","1.17",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/10/22","2025/10/28","NT$1,681","1,644","89","NT$18.88","5.41%","0","0.00%","","NT$0","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/10/29","2025/10/31","NT$584","5,122","255","NT$2.29","4.98%","1","0.39%","NT$584","NT$2,055","3.52",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/10/29","2025/10/31","NT$666","565","32","NT$20.83","5.66%","0","0.00%","","NT$0","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/11/1","2025/11/9","NT$462","4,459","715","NT$0.65","16.03%","0","0.00%","","","0.00",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/11/1","2025/11/9","NT$482","536","24","NT$20.07","4.48%","0","0.00%","","","0.00",""
-"251001_1111免運","全站","最高成效","2025/11/1","2025/11/9","NT$6,190","87,740","4,269","NT$1.45","4.87%","1","0.02%","NT$6,190","NT$1,990","0.32",""
-"251001_1111免運","全站","最高成效","2025/11/10","2025/11/11","NT$907","7,724","545","NT$1.66","7.06%","0","0.00%","","","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/11/12","2025/11/18","NT$1,167","9,863","1,971","NT$0.59","19.98%","0","0.00%","","","0.00",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/11/12","2025/11/18","NT$1,097","901","52","NT$21.10","5.77%","0","0.00%","","","0.00",""
-"251001_BOSCH打氣機","BOSCH打氣機","最高成效","2025/11/19","2025/12/3","NT$1,909","21,303","280","NT$6.82","1.31%","2","0.71%","NT$955","NT$4,195","2.20",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/11/19","2025/12/3","NT$2,852","2,126","156","NT$18.28","7.34%","2","1.28%","NT$1,426","NT$630","0.22",""
-"251007_LM車用香氛","LM車用香氛","關鍵字廣告","2025/12/4","2025/12/4","NT$206","81","9","NT$22.89","11.11%","0","0.00%","","","0.00",""
-"251204_雙12免運","全站","最高成效","2025/12/4","2025/12/9","NT$3,614","55,195","454","NT$7.96","0.82%","1","0.22%","NT$3,614","NT$1,990","0.55","""
-
-csv_meta_raw = """廣告活動,廣告目標,廣告期間(起),廣告期間(迄),費用,曝光次數,點擊數,CPC,點擊率,轉換,轉換率,單次轉換費用,轉換金額,ROAS,附註
-"BOSCH打氣機","BOSCH打氣機","2025/10/8","2025/10/14","NT$1,398","27,490","1,198","NT$1.17","4.36%","0","0.00%","","","0.00",""
-"LM芳香磚","LM芳香磚","2025/10/7","2025/10/14","NT$1,434","38,277","1,429","NT$1.00","3.73%","0","0.00%","","","0.00",""
-"BOSCH打氣機","BOSCH打氣機","2025/10/15","2025/10/21","NT$1,603","15,849","362","NT$4.43","2.28%","6","1.66%","NT$267","NT$12,345","7.70",""
-"LM芳香磚","LM芳香磚","2025/10/15","2025/10/21","NT$1,524","20,658","295","NT$5.17","1.43%","10","3.39%","NT$152","NT$6,430","4.22",""
-"BOSCH打氣機","BOSCH打氣機","2025/10/22","2025/10/28","NT$1,758","17,374","447","NT$3.93","2.57%","2","0.45%","NT$879","NT$2,420","1.38",""
-"LM芳香磚","LM芳香磚","2025/10/22","2025/10/28","NT$1,752","15,104","305","NT$5.74","2.02%","4","1.31%","NT$438","NT$2,260","1.29",""
-"BOSCH打氣機","BOSCH打氣機","2025/10/29","2025/10/31","NT$896","10,654","158","NT$5.67","1.48%","0","0.00%","","","0.00",""
-"LM芳香磚","LM芳香磚","2025/10/29","2025/10/31","NT$892","11,968","132","NT$6.76","1.10%","4","3.03%","NT$223","NT$2,010","2.25",""
-"251101_1111免運","全站","2025/11/1","2025/11/9","NT$7,184","55,497","1,471","NT$4.88","2.65%","5","0.34%","NT$1,437","NT$8,665","1.21",""
-"251101_1111免運-副本","全站","2025/11/1","2025/11/9","NT$1,522","13,334","429","NT$3.55","3.22%","4","0.93%","NT$381","NT$5,254","3.45",""
-"251101_1111免運-副本","全站","2025/11/10","2025/11/11","NT$2,929","14,450","696","NT$4.21","4.82%","8","1.15%","NT$366","NT$7,515","2.57",""
-"251014_BOSCH打氣機","BOSCH打氣機","2025/11/12","2025/11/18","NT$2,423","41,389","532","NT$4.55","1.29%","5","0.94%","NT$485","NT$9,284","3.83",""
-"251014_LM芳香磚","LM芳香磚","2025/11/12","2025/11/18","NT$2,354","30,336","383","NT$6.15","1.26%","12","3.13%","NT$196","NT$9,275","3.94",""
-"251014_BOSCH打氣機","BOSCH打氣機","2025/11/19","2025/12/3","NT$4,568","52,364","610","NT$7.49","1.16%","7","1.15%","NT$653","NT$11,905","2.61",""
-"251113_LM芳香磚","LM芳香磚","2025/11/19","2025/12/3","NT$5,934","82,282","954","NT$6.22","1.16%","24","2.52%","NT$247","NT$15,050","2.54",""
-"251113_LM芳香磚","LM芳香磚","2025/12/4","2025/12/4","NT$260","2,874","35","NT$7.43","1.22%","0","0.00%","","","0.00",""
-"251204_雙12免運","全站","2025/12/4","2025/12/9","NT$7,760","81,843","2,040","NT$3.80","2.49%","23","1.13%","NT$337","NT$3,312","0.43","""
-
-# 2. 設定頁面
+# 1. 設定頁面
 st.set_page_config(page_title="廣告成效儀表板", layout="wide")
 st.title("📊 Google & Meta 廣告成效雲端戰情室")
 
+# 2. Google Sheet 設定
+# 您的試算表 ID
+sheet_id = "17EYeSds7eV-eX4qFt3_gS8ttL-aw-ARzVJ1rwveqTZ4"
+
+# === 設定分頁 ID (GID) ===
+# Google 分頁通常是第一個，ID 預設為 "0"
+gid_google = "0" 
+
+# [請修改這裡] Meta 分頁的 ID，請查看您 Google Sheet 網址列上的 gid=數字
+# 為了避免錯誤，我先預設為 "0" (即讀取第一頁)，請您確認後修改
+gid_meta = "1891939344"  # <--- 請將這裡的數字改成 Meta 分頁真正的 gid
+
+# 組合 CSV 下載連結
+url_google = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_google}"
+url_meta = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_meta}"
+
 # 3. 處理數據函數
-@st.cache_data
+@st.cache_data(ttl=600)  # 設定 600秒 (10分鐘) 快取過期，自動重新抓取
 def load_and_clean_data():
-    df_g = pd.read_csv(io.StringIO(csv_google_raw))
-    df_m = pd.read_csv(io.StringIO(csv_meta_raw))
-    
+    try:
+        # 讀取 CSV
+        df_g = pd.read_csv(url_google)
+        df_m = pd.read_csv(url_meta)
+    except Exception as e:
+        st.error(f"讀取 Google Sheet 失敗，請確認 GID 是否正確或是權限是否公開。錯誤訊息: {e}")
+        return pd.DataFrame() # 回傳空表避免當機
+
     df_g['Platform'] = 'Google'
     df_m['Platform'] = 'Meta'
     
@@ -65,7 +43,7 @@ def load_and_clean_data():
         return 0.0
     
     def clean_numeric(x):
-        # 移除型別判斷，強制轉字串處理，確保數字與字串都能被正確轉換
+        # 修正後的邏輯：先轉字串再處理，避免純數字被誤判
         if x is None or str(x).strip() == '':
             return 0.0
         return float(str(x).replace(',', ''))
@@ -81,7 +59,7 @@ def load_and_clean_data():
             if col in df.columns: 
                 df[col] = df[col].apply(clean_numeric)
         
-        # 日期轉換 (確保格式一致)
+        # 日期轉換
         df['廣告期間(起)'] = pd.to_datetime(df['廣告期間(起)'], errors='coerce')
         if '轉換金額' in df.columns: 
             df['轉換金額'] = df['轉換金額'].fillna(0)
@@ -90,25 +68,38 @@ def load_and_clean_data():
 
     # 合併
     common = ['Platform', '廣告活動', '廣告期間(起)', '費用', '曝光次數', '點擊數', 'CPC', '轉換', '轉換金額', 'ROAS']
-    return pd.concat([df_g[common], df_m[common]], ignore_index=True)
+    # 確保欄位存在才合併，避免不同步錯誤
+    common_exist = [c for c in common if c in df_g.columns and c in df_m.columns]
+    
+    return pd.concat([df_g[common_exist], df_m[common_exist]], ignore_index=True)
 
 df = load_and_clean_data()
+
+# 若數據讀取失敗則中止程式
+if df.empty:
+    st.stop()
 
 # 4. 側邊欄控制與過濾
 st.sidebar.header("🎯 分析過濾器")
 platforms = st.sidebar.multiselect("選擇平台", df['Platform'].unique(), default=df['Platform'].unique())
 campaigns = st.sidebar.multiselect("選擇廣告活動", df['廣告活動'].unique(), default=df['廣告活動'].unique())
 
-min_date, max_date = df['廣告期間(起)'].min(), df['廣告期間(起)'].max()
-date_range = st.sidebar.date_input("選擇日期區間", [min_date, max_date])
+min_date = df['廣告期間(起)'].min()
+max_date = df['廣告期間(起)'].max()
 
-# 應用過濾
-if len(date_range) == 2:
-    start_d, end_d = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-    mask = (df['Platform'].isin(platforms)) & (df['廣告活動'].isin(campaigns)) & (df['廣告期間(起)'] >= start_d) & (df['廣告期間(起)'] <= end_d)
-    df_filtered = df[mask]
-else:
+# 避免日期為 NaT 的錯誤處理
+if pd.isnull(min_date) or pd.isnull(max_date):
+    st.sidebar.warning("日期格式有誤或無數據")
     df_filtered = df
+else:
+    date_range = st.sidebar.date_input("選擇日期區間", [min_date, max_date])
+    # 應用過濾
+    if len(date_range) == 2:
+        start_d, end_d = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        mask = (df['Platform'].isin(platforms)) & (df['廣告活動'].isin(campaigns)) & (df['廣告期間(起)'] >= start_d) & (df['廣告期間(起)'] <= end_d)
+        df_filtered = df[mask]
+    else:
+        df_filtered = df
 
 # 5. 核心指標 (KPIs)
 col1, col2, col3, col4 = st.columns(4)
@@ -129,21 +120,27 @@ c1, c2 = st.columns([2, 1])
 
 with c1:
     st.subheader("📅 雙平台趨勢分析 (Weekly Trend)")
-    # 根據週次聚合數據
-    df_filtered['Week'] = df_filtered['廣告期間(起)'].dt.to_period('W').apply(lambda r: r.start_time)
-    df_weekly = df_filtered.groupby(['Platform', 'Week'])[['費用', '轉換金額', 'ROAS']].mean().reset_index()
-    
-    metric_select = st.selectbox("選擇趨勢指標", ['ROAS', '費用', '轉換金額'], index=0)
-    fig_line = px.line(df_weekly, x='Week', y=metric_select, color='Platform', markers=True, title=f"{metric_select} 週走勢")
-    st.plotly_chart(fig_line, use_container_width=True)
+    if not df_filtered.empty:
+        # 根據週次聚合數據
+        df_filtered['Week'] = df_filtered['廣告期間(起)'].dt.to_period('W').apply(lambda r: r.start_time)
+        df_weekly = df_filtered.groupby(['Platform', 'Week'])[['費用', '轉換金額', 'ROAS']].mean().reset_index()
+        
+        metric_select = st.selectbox("選擇趨勢指標", ['ROAS', '費用', '轉換金額'], index=0)
+        fig_line = px.line(df_weekly, x='Week', y=metric_select, color='Platform', markers=True, title=f"{metric_select} 週走勢")
+        st.plotly_chart(fig_line, use_container_width=True)
+    else:
+        st.info("無數據可顯示趨勢")
 
 with c2:
     st.subheader("📊 廣告效益散佈圖")
-    # 每個廣告活動的表現
-    df_agg = df_filtered.groupby(['Platform', '廣告活動'])[['費用', '轉換金額', 'ROAS']].sum().reset_index()
-    fig_scat = px.scatter(df_agg, x='費用', y='轉換金額', color='Platform', size='ROAS', hover_name='廣告活動', 
-                          title="花費 vs 營收 (點越大 ROAS 越高)")
-    st.plotly_chart(fig_scat, use_container_width=True)
+    if not df_filtered.empty:
+        # 每個廣告活動的表現
+        df_agg = df_filtered.groupby(['Platform', '廣告活動'])[['費用', '轉換金額', 'ROAS']].sum().reset_index()
+        fig_scat = px.scatter(df_agg, x='費用', y='轉換金額', color='Platform', size='ROAS', hover_name='廣告活動', 
+                              title="花費 vs 營收 (點越大 ROAS 越高)")
+        st.plotly_chart(fig_scat, use_container_width=True)
+    else:
+        st.info("無數據可顯示散佈圖")
 
 with st.expander("📄 查看詳細數據報表"):
     st.dataframe(df_filtered.sort_values(by='廣告期間(起)', ascending=False))
