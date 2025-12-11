@@ -5,12 +5,12 @@ import plotly.graph_objects as go
 
 # 1. 設定頁面
 st.set_page_config(page_title="全通路電商戰情室", layout="wide")
-st.title("📊 全通路電商戰情室 (Ads + Official Site)")
+st.title("📊 全通路電商戰情室")
 
 # 2. Google Sheet 設定
 sheet_id = "17EYeSds7eV-eX4qFt3_gS8ttL-aw-ARzVJ1rwveqTZ4"
 gid_google = "0" 
-gid_meta = "1891939344"   # [⚠️請確認] Meta GID
+gid_meta = "1891939344"   # [已更新] Meta GID
 gid_site = "1703192625"  # [⚠️請確認] 官網 GID
 
 url_google = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid_google}"
@@ -165,13 +165,22 @@ with tab1:
     
     # KPI (始終顯示區間總和，不受日/週影響)
     k1, k2, k3, k4 = st.columns(4)
-    tot_rev = df_merge_daily['全站營收'].sum()
-    ad_rev = df_merge_daily['廣告營收'].sum()
+    tot_rev = df_merge_daily['全站營收'].sum() if view_mode == "每日 (Daily)" else df_chart['全站營收'].sum() # 確保總和一致，但用 resample 後的 df_chart 來算比較安全
+    # 修正：其實總和無論日或週都應該一樣，使用 df_merge_daily (原始每日) 計算最精準
+    tot_rev = df_site_f['全站營收'].sum()
+    ad_rev = df_ads_f['轉換金額'].sum()
     org_rev = tot_rev - ad_rev 
     
     k1.metric("🏠 全站總營收", f"${tot_rev:,.0f}")
     k2.metric("📢 廣告帶來營收", f"${ad_rev:,.0f}", delta=f"佔比 {(ad_rev/tot_rev*100 if tot_rev>0 else 0):.1f}%")
-    k3.metric("🌳 自然/其他營收", f"${org_rev:,.0f}", help="若為負值，代表廣告平台追蹤到的營收大於官網實際入帳")
+    
+    # [新增] 加上 Help 說明
+    k3.metric(
+        "🌳 自然/其他營收", 
+        f"${org_rev:,.0f}", 
+        help="對於營收：看到負數，請理解為**「多個廣告平台重複搶功勞 (Over-attribution)」**。"
+    )
+    
     k4.metric("🛒 全站轉換率", f"{(df_merge_daily['全站營收'].count() / df_merge_daily['全站流量'].sum() * 100 if df_merge_daily['全站流量'].sum()>0 else 0):.2f}%")
     
     # KPI Row 2: 流量
@@ -184,8 +193,15 @@ with tab1:
     
     t1.metric("👣 全站總流量 (Visits)", f"{tot_traffic:,.0f}")
     t2.metric("👆 廣告點擊數 (Clicks)", f"{ad_clicks:,.0f}")
-    t3.metric("📉 流量落差 (自然流量)", f"{org_traffic_diff:,.0f}", 
-              help="全站流量 - 廣告點擊。若為負值，代表發生「點擊流失」。", delta_color="off") 
+    
+    # [新增] 加上 Help 說明
+    t3.metric(
+        "📉 流量落差 (自然流量)", 
+        f"{org_traffic_diff:,.0f}", 
+        delta_color="off",
+        help="對於流量：看到負數，請理解為**「流失掉的廣告訪客」**。"
+    )
+    
     t4.metric("👥 新增會員", f"{new_mem:,.0f} 人")
     
     st.divider()
